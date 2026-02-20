@@ -1,5 +1,5 @@
 /**
- * @tinyland-inc/tinyland-admin-user-repository
+ * @tummycrypt/tinyland-admin-user-repository
  *
  * Admin user repository with flat-file JSON storage and bcrypt password hashing.
  * Framework-agnostic: all external dependencies are injected via configuration.
@@ -10,7 +10,7 @@
  *   configure,
  *   AdminUserRepository,
  *   adminUserRepository,
- * } from '@tinyland-inc/tinyland-admin-user-repository';
+ * } from '@tummycrypt/tinyland-admin-user-repository';
  *
  * // Configure once at startup
  * configure({
@@ -26,7 +26,7 @@
  * const allUsers = await repo.findAll();
  * ```
  *
- * @module @tinyland-inc/tinyland-admin-user-repository
+ * @module @tummycrypt/tinyland-admin-user-repository
  */
 
 // Configuration
