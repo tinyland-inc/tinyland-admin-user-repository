@@ -11,9 +11,9 @@ import {
 } from '../src/index.js';
 import type { AdminUser, AdminUserRepositoryConfig } from '../src/index.js';
 
-// ===========================================================================
-// Mocks
-// ===========================================================================
+
+
+
 
 vi.mock('fs', () => ({
 	promises: {
@@ -44,9 +44,9 @@ const mockChmod = vi.mocked(fs.chmod);
 const mockHash = vi.mocked(bcrypt.hash);
 const mockCompare = vi.mocked(bcrypt.compare);
 
-// ===========================================================================
-// Helpers
-// ===========================================================================
+
+
+
 
 function makeUser(overrides: Partial<AdminUser> = {}): AdminUser {
 	return {
@@ -88,9 +88,9 @@ function setWriteSuccess(): void {
 	mockChmod.mockResolvedValue(undefined);
 }
 
-// ===========================================================================
-// Setup
-// ===========================================================================
+
+
+
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -99,9 +99,9 @@ beforeEach(() => {
 	setWriteSuccess();
 });
 
-// ===========================================================================
-// 1. Config DI (~10 tests)
-// ===========================================================================
+
+
+
 
 describe('Config DI', () => {
 	it('should return default usersFilePath when unconfigured', () => {
@@ -164,9 +164,9 @@ describe('Config DI', () => {
 	});
 });
 
-// ===========================================================================
-// 2. readUsers / writeUsers (~12 tests)
-// ===========================================================================
+
+
+
 
 describe('readUsers / writeUsers (via public methods)', () => {
 	let repo: AdminUserRepository;
@@ -250,14 +250,14 @@ describe('readUsers / writeUsers (via public methods)', () => {
 		const user = makeUser();
 		setFileContent([user]);
 
-		// Populate cache
+		
 		await repo.findByHandle('testuser');
 		expect(await repo.findByHandle('testuser')).toBeTruthy();
 
-		// Write clears cache, so next read hits file again
+		
 		await repo.update('user-1', { role: 'moderator' });
-		// readFile: 1 (first findByHandle) + 1 (update readUsers) = 2
-		// second findByHandle was cached, update reads once for readUsers
+		
+		
 		expect(mockReadFile).toHaveBeenCalledTimes(2);
 	});
 
@@ -268,9 +268,9 @@ describe('readUsers / writeUsers (via public methods)', () => {
 	});
 });
 
-// ===========================================================================
-// 3. findByHandle (~12 tests)
-// ===========================================================================
+
+
+
 
 describe('findByHandle', () => {
 	let repo: AdminUserRepository;
@@ -317,7 +317,7 @@ describe('findByHandle', () => {
 		setFileContent([makeUser({ handle: 'alice' })]);
 		await repo.findByHandle('alice');
 		await repo.findByHandle('alice');
-		// readFile called only once due to cache
+		
 		expect(mockReadFile).toHaveBeenCalledTimes(1);
 	});
 
@@ -329,10 +329,10 @@ describe('findByHandle', () => {
 	});
 
 	it('should bypass cache after TTL expires', async () => {
-		configure({ cacheTtl: 0 }); // Immediate expiry
+		configure({ cacheTtl: 0 }); 
 		setFileContent([makeUser({ handle: 'alice' })]);
 		await repo.findByHandle('alice');
-		// With TTL=0, every call reads file
+		
 		await repo.findByHandle('alice');
 		expect(mockReadFile).toHaveBeenCalledTimes(2);
 	});
@@ -366,9 +366,9 @@ describe('findByHandle', () => {
 	});
 });
 
-// ===========================================================================
-// 4. findById (~10 tests)
-// ===========================================================================
+
+
+
 
 describe('findById', () => {
 	let repo: AdminUserRepository;
@@ -444,15 +444,15 @@ describe('findById', () => {
 	it('should use separate cache keys from findByHandle', async () => {
 		setFileContent([makeUser({ id: 'u1', handle: 'alice' })]);
 		await repo.findByHandle('alice');
-		// findById should still read from file since different cache key
+		
 		await repo.findById('u1');
 		expect(mockReadFile).toHaveBeenCalledTimes(2);
 	});
 });
 
-// ===========================================================================
-// 5. findByEmail (~8 tests)
-// ===========================================================================
+
+
+
 
 describe('findByEmail', () => {
 	let repo: AdminUserRepository;
@@ -516,9 +516,9 @@ describe('findByEmail', () => {
 	});
 });
 
-// ===========================================================================
-// 6. findAll (~5 tests)
-// ===========================================================================
+
+
+
 
 describe('findAll', () => {
 	let repo: AdminUserRepository;
@@ -562,9 +562,9 @@ describe('findAll', () => {
 	});
 });
 
-// ===========================================================================
-// 7. create (~15 tests)
-// ===========================================================================
+
+
+
 
 describe('create', () => {
 	let repo: AdminUserRepository;
@@ -615,7 +615,7 @@ describe('create', () => {
 	it('should increment UUID counter for multiple creates', async () => {
 		setFileContent([]);
 		const user1 = await repo.create({ handle: 'admin1', password: 'pass1' });
-		// Re-mock readFile to include user1 for the next create
+		
 		setFileContent([user1]);
 		const user2 = await repo.create({ handle: 'admin2', password: 'pass2' });
 		expect(user1.id).toBe('test-uuid-1');
@@ -678,9 +678,9 @@ describe('create', () => {
 	});
 });
 
-// ===========================================================================
-// 8. update (~12 tests)
-// ===========================================================================
+
+
+
 
 describe('update', () => {
 	let repo: AdminUserRepository;
@@ -729,10 +729,10 @@ describe('update', () => {
 
 	it('should clear cache after update', async () => {
 		setFileContent([makeUser({ id: 'u1', handle: 'alice' })]);
-		await repo.findByHandle('alice'); // populate cache
-		await repo.update('u1', { role: 'viewer' }); // clear cache
+		await repo.findByHandle('alice'); 
+		await repo.update('u1', { role: 'viewer' }); 
 
-		// Next findByHandle reads from file again
+		
 		setFileContent([makeUser({ id: 'u1', handle: 'alice', role: 'viewer' })]);
 		const user = await repo.findByHandle('alice');
 		expect(user!.role).toBe('viewer');
@@ -787,9 +787,9 @@ describe('update', () => {
 	});
 });
 
-// ===========================================================================
-// 9. delete (~8 tests)
-// ===========================================================================
+
+
+
 
 describe('delete', () => {
 	let repo: AdminUserRepository;
@@ -817,7 +817,7 @@ describe('delete', () => {
 		setFileContent([user]);
 		await repo.delete('u1');
 
-		// After delete, file has user with isActive: false
+		
 		setFileContent([{ ...user, isActive: false }]);
 		const result = await repo.findByHandle('alice');
 		expect(result).toBeNull();
@@ -864,9 +864,9 @@ describe('delete', () => {
 	});
 });
 
-// ===========================================================================
-// 10. verifyPassword (~12 tests)
-// ===========================================================================
+
+
+
 
 describe('verifyPassword', () => {
 	let repo: AdminUserRepository;
@@ -941,7 +941,7 @@ describe('verifyPassword', () => {
 		setFileContent([makeUser({ handle: 'alice', passwordHash: '$2a$10$hashed_pass' })]);
 		const user = await repo.verifyPassword('alice', 'pass');
 		expect(user).toBeTruthy();
-		// No "password" field should exist
+		
 		expect((user as Record<string, unknown>).password).toBeUndefined();
 	});
 
@@ -960,9 +960,9 @@ describe('verifyPassword', () => {
 	});
 });
 
-// ===========================================================================
-// 11. updatePassword (~8 tests)
-// ===========================================================================
+
+
+
 
 describe('updatePassword', () => {
 	let repo: AdminUserRepository;
@@ -1008,7 +1008,7 @@ describe('updatePassword', () => {
 		setFileContent([makeUser({ id: 'u1', handle: 'alice' })]);
 		await repo.updatePassword('u1', 'newpassword');
 
-		// After update, file has new hash
+		
 		const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string);
 		setFileContent(written);
 
@@ -1026,18 +1026,18 @@ describe('updatePassword', () => {
 
 	it('should clear cache after password update', async () => {
 		setFileContent([makeUser({ id: 'u1', handle: 'alice' })]);
-		await repo.findByHandle('alice'); // populate cache - 1 read
-		await repo.updatePassword('u1', 'newpass'); // update reads once - 2 reads total
-		// cache should be cleared by writeUsers
+		await repo.findByHandle('alice'); 
+		await repo.updatePassword('u1', 'newpass'); 
+		
 		setFileContent([makeUser({ id: 'u1', handle: 'alice', passwordHash: '$2a$10$hashed_newpass' })]);
-		await repo.findByHandle('alice'); // reads file again since cache cleared - 3 reads total
+		await repo.findByHandle('alice'); 
 		expect(mockReadFile).toHaveBeenCalledTimes(3);
 	});
 });
 
-// ===========================================================================
-// 12. TOTP (~10 tests)
-// ===========================================================================
+
+
+
 
 describe('TOTP', () => {
 	let repo: AdminUserRepository;
@@ -1117,9 +1117,9 @@ describe('TOTP', () => {
 	});
 });
 
-// ===========================================================================
-// 13. hasAnyUsers (~5 tests)
-// ===========================================================================
+
+
+
 
 describe('hasAnyUsers', () => {
 	let repo: AdminUserRepository;
@@ -1154,9 +1154,9 @@ describe('hasAnyUsers', () => {
 	});
 });
 
-// ===========================================================================
-// 14. updateLastLogin (~5 tests)
-// ===========================================================================
+
+
+
 
 describe('updateLastLogin', () => {
 	let repo: AdminUserRepository;
@@ -1190,7 +1190,7 @@ describe('updateLastLogin', () => {
 		setFileContent([makeUser({ id: 'u1' })]);
 		await repo.updateLastLogin('u1');
 		const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string);
-		// ISO string should contain 'T' and 'Z' or timezone offset
+		
 		expect(written[0].lastLoginAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 	});
 
@@ -1202,9 +1202,9 @@ describe('updateLastLogin', () => {
 	});
 });
 
-// ===========================================================================
-// 15. needsFirstLoginSetup (~5 tests)
-// ===========================================================================
+
+
+
 
 describe('needsFirstLoginSetup', () => {
 	let repo: AdminUserRepository;
@@ -1241,9 +1241,9 @@ describe('needsFirstLoginSetup', () => {
 	});
 });
 
-// ===========================================================================
-// 16. Cache (~8 tests)
-// ===========================================================================
+
+
+
 
 describe('Cache', () => {
 	let repo: AdminUserRepository;
@@ -1287,12 +1287,12 @@ describe('Cache', () => {
 		await repo.update('u1', { role: 'viewer' });
 		setFileContent([makeUser({ id: 'u1', handle: 'alice', role: 'viewer' })]);
 		await repo.findByHandle('alice');
-		// 1 (first findByHandle) + 1 (update readUsers) + 1 (final findByHandle) = 3
+		
 		expect(mockReadFile).toHaveBeenCalledTimes(3);
 	});
 
 	it('should expire cache entries after TTL', async () => {
-		configure({ cacheTtl: 0 }); // Immediate expiry
+		configure({ cacheTtl: 0 }); 
 		setFileContent([makeUser({ handle: 'alice' })]);
 		await repo.findByHandle('alice');
 		await repo.findByHandle('alice');
@@ -1314,9 +1314,9 @@ describe('Cache', () => {
 	});
 });
 
-// ===========================================================================
-// 17. Edge cases (~8 tests)
-// ===========================================================================
+
+
+
 
 describe('Edge cases', () => {
 	let repo: AdminUserRepository;
@@ -1333,7 +1333,7 @@ describe('Edge cases', () => {
 	it('should handle file permissions error on chmod gracefully', async () => {
 		mockChmod.mockRejectedValue(new Error('Operation not permitted'));
 		setFileContent([]);
-		// Should not throw even though chmod fails
+		
 		await expect(repo.create({ handle: 'newadmin', password: 'pass' })).resolves.toBeDefined();
 	});
 
