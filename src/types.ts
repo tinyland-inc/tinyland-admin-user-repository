@@ -1,16 +1,16 @@
-/**
- * Types for tinyland-admin-user-repository
- *
- * Minimal AdminUser interface containing only the fields the repository
- * actually reads and writes. The index signature allows pass-through of
- * additional application-specific fields.
- *
- * @module types
- */
 
-/**
- * Admin user record stored in the flat-file JSON database.
- */
+
+
+
+
+
+
+
+
+
+
+
+
 export interface AdminUser {
 	id: string;
 	username: string;
@@ -27,13 +27,13 @@ export interface AdminUser {
 	needsOnboarding?: boolean;
 	onboardingStep?: number;
 	firstLogin?: boolean;
-	/** Allow additional application-specific fields */
+	
 	[key: string]: unknown;
 }
 
-/**
- * Data required to create a new admin user.
- */
+
+
+
 export interface CreateUserData {
 	handle: string;
 	password: string;
