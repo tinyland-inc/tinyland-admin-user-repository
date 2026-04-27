@@ -1,6 +1,6 @@
 {
   "name": "@tummycrypt/tinyland-admin-user-repository",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Admin user repository with flat-file JSON storage and bcrypt password hashing",
   "type": "module",
   "license": "Zlib AND LicenseRef-Tinyland-Proprietary",
@@ -21,17 +21,17 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "test": "vitest",
+    "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest --coverage",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "pnpm build && pnpm check:package",
+    "check:package": "publint"
   },
   "author": "Tinyland.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tinyland-inc/tinyland.dev",
-    "directory": "packages/tinyland-admin-user-repository"
+    "url": "git+https://github.com/tinyland-inc/tinyland-admin-user-repository.git"
   },
   "dependencies": {
     "bcryptjs": "^2.4.0"
@@ -40,14 +40,19 @@
     "@types/bcryptjs": "^2.4.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^4.0.0"
+    "vitest": "^4.0.0",
+    "publint": "^0.3.18"
   },
   "engines": {
     "node": ">=22.0.0"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "provenance": true
+    "access": "public"
+  },
+  "packageManager": "pnpm@10.13.1",
+  "homepage": "https://github.com/tinyland-inc/tinyland-admin-user-repository",
+  "bugs": {
+    "url": "https://github.com/tinyland-inc/tinyland-admin-user-repository/issues"
   }
 }

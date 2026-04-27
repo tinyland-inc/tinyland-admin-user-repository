@@ -8,6 +8,12 @@ import {
 	resetConfig,
 	AdminUserRepository,
 	adminUserRepository,
+	createPublicHandleDirectory,
+	publicHandleDirectory,
+	PUBLIC_HANDLE_DIRECTORY_BACKING_FILE,
+	PUBLIC_HANDLE_DIRECTORY_BACKING_SURFACE,
+	PUBLIC_HANDLE_DIRECTORY_SOURCE_MODEL,
+	repositoryBackedPublicHandleDirectorySource,
 } from '../src/index.js';
 import type { AdminUser, AdminUserRepositoryConfig } from '../src/index.js';
 
@@ -201,6 +207,14 @@ describe('readUsers / writeUsers (via public methods)', () => {
 		expect(result).toHaveLength(0);
 	});
 
+	it('should strip credential fields from findAllPublic', async () => {
+		setFileContent([makeUser({ totpSecretId: 'secret-id' })]);
+		const result = await repo.findAllPublic();
+		expect(result).toHaveLength(1);
+		expect(result[0].passwordHash).toBeUndefined();
+		expect(result[0].totpSecretId).toBeUndefined();
+	});
+
 	it('should throw on non-ENOENT read errors', async () => {
 		const error = new Error('Permission denied') as NodeJS.ErrnoException;
 		error.code = 'EACCES';
@@ -388,6 +402,78 @@ describe('findById', () => {
 		setFileContent([makeUser({ id: 'abc-123' })]);
 		const user = await repo.findById('nonexistent');
 		expect(user).toBeNull();
+	});
+
+	it('should strip credential fields from findByIdPublic', async () => {
+		setFileContent([makeUser({ id: 'abc-123', totpSecretId: 'secret-id' })]);
+		const user = await repo.findByIdPublic('abc-123');
+		expect(user).toBeTruthy();
+		expect(user!.passwordHash).toBeUndefined();
+		expect(user!.totpSecretId).toBeUndefined();
+	});
+
+	it('should expose a narrowed public handle identity', async () => {
+		setFileContent([
+			makeUser({
+				handle: 'public-user',
+				username: 'public-user',
+				email: 'private@example.com',
+				permissions: ['super-secret'],
+				bio: 'hello',
+				avatarUrl: '/avatar.png',
+			}),
+		]);
+		const user = await repo.findPublicHandleIdentity('public-user');
+		expect(user).toBeTruthy();
+		expect(user).toMatchObject({
+			handle: 'public-user',
+			username: 'public-user',
+			bio: 'hello',
+			avatarUrl: '/avatar.png',
+		});
+		expect(user).not.toHaveProperty('email');
+		expect(user).not.toHaveProperty('permissions');
+		expect(user).not.toHaveProperty('passwordHash');
+	});
+
+	it('should list narrowed public handle identities', async () => {
+		setFileContent([
+			makeUser({ handle: 'alice', username: 'alice', email: 'alice@example.com' }),
+			makeUser({ handle: 'bob', username: 'bob', isActive: false }),
+		]);
+		const users = await repo.findAllPublicHandleIdentities();
+		expect(users).toHaveLength(1);
+		expect(users[0]).toMatchObject({ handle: 'alice', username: 'alice' });
+		expect(users[0]).not.toHaveProperty('email');
+	});
+
+	it('should create stored users without re-hashing password data', async () => {
+		setFileContent([]);
+
+		await repo.createStoredUser({
+			handle: 'stored-user',
+			username: 'stored-user',
+			email: 'stored@example.com',
+			passwordHash: 'prehashed-value',
+			role: 'admin',
+			isActive: true,
+			totpEnabled: false,
+			needsOnboarding: true,
+			onboardingStep: 0,
+		});
+
+		const users = JSON.parse(mockWriteFile.mock.calls[0][1] as string);
+		expect(users).toHaveLength(1);
+		expect(users[0].passwordHash).toBe('prehashed-value');
+		expect(users[0].handle).toBe('stored-user');
+		expect(users[0].username).toBe('stored-user');
+	});
+
+	it('should permanently delete stored users when requested', async () => {
+		setFileContent([makeUser({ id: 'delete-me' })]);
+		const deleted = await repo.deletePermanently('delete-me');
+		expect(deleted).toBe(true);
+		expect(JSON.parse(mockWriteFile.mock.calls[0][1] as string)).toEqual([]);
 	});
 
 	it('should include inactive users (findById does not filter by isActive)', async () => {
@@ -1359,6 +1445,56 @@ describe('Edge cases', () => {
 
 	it('should provide a singleton instance', () => {
 		expect(adminUserRepository).toBeInstanceOf(AdminUserRepository);
+	});
+
+	it('should expose explicit public handle directory authority metadata', () => {
+		expect(publicHandleDirectory.sourceModel).toBe(PUBLIC_HANDLE_DIRECTORY_SOURCE_MODEL);
+		expect(publicHandleDirectory.backingFile).toBe(PUBLIC_HANDLE_DIRECTORY_BACKING_FILE);
+		expect(publicHandleDirectory.backingSurface).toBe(PUBLIC_HANDLE_DIRECTORY_BACKING_SURFACE);
+	});
+
+	it('should expose an explicit repository-backed source adapter', () => {
+		expect(repositoryBackedPublicHandleDirectorySource.sourceModel).toBe(
+			PUBLIC_HANDLE_DIRECTORY_SOURCE_MODEL,
+		);
+		expect(repositoryBackedPublicHandleDirectorySource.backingSurface).toBe(
+			PUBLIC_HANDLE_DIRECTORY_BACKING_SURFACE,
+		);
+		expect(repositoryBackedPublicHandleDirectorySource.backingFile).toBe(
+			PUBLIC_HANDLE_DIRECTORY_BACKING_FILE,
+		);
+	});
+
+	it('should allow creating a public handle directory from a custom source', async () => {
+		const findByHandle = vi.fn().mockResolvedValue({
+			id: 'user-1',
+			username: 'alice',
+			handle: 'alice',
+			role: 'admin',
+		});
+		const findAll = vi.fn().mockResolvedValue([
+			{
+				id: 'user-1',
+				username: 'alice',
+				handle: 'alice',
+				role: 'admin',
+			},
+		]);
+
+		const directory = createPublicHandleDirectory({
+			sourceModel: 'test_public_identity_source',
+			backingSurface: 'memory://public-identities',
+			findByHandle,
+			findAll,
+		});
+
+		expect(directory.sourceModel).toBe('test_public_identity_source');
+		expect(directory.backingSurface).toBe('memory://public-identities');
+		expect(directory.backingFile).toBeNull();
+		await expect(directory.findByHandle('alice')).resolves.toMatchObject({ handle: 'alice' });
+		await expect(directory.findAll()).resolves.toHaveLength(1);
+		expect(findByHandle).toHaveBeenCalledWith('alice');
+		expect(findAll).toHaveBeenCalledTimes(1);
 	});
 
 	it('should allow creating separate instances', () => {

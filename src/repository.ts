@@ -18,10 +18,42 @@ import { promises as fs } from 'fs';
 import * as bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getConfig } from './config.js';
-import type { AdminUser, CreateUserData } from './types.js';
+import type {
+	AdminUser,
+	CreateUserData,
+	PublicAdminUser,
+	PublicHandleIdentity,
+	StoredAdminUserData,
+} from './types.js';
 
 export class AdminUserRepository {
 	private cache: Map<string, { user: AdminUser; timestamp: number }> = new Map();
+
+	private sanitizeUser<T extends AdminUser>(user: T): PublicAdminUser {
+		const { passwordHash, totpSecretId, ...sanitized } = user;
+		return sanitized;
+	}
+
+	private sanitizePublicHandleIdentity<T extends AdminUser>(user: T): PublicHandleIdentity {
+		return {
+			id: user.id,
+			username: user.username,
+			handle: user.handle,
+			displayName: user.displayName,
+			role: user.role,
+			isActive: user.isActive,
+			createdAt: user.createdAt,
+			updatedAt: user.updatedAt,
+			bio: user.bio as string | undefined,
+			avatarUrl: user.avatarUrl as string | undefined,
+			bannerUrl: user.bannerUrl as string | undefined,
+			website: user.website as string | undefined,
+			location: user.location as string | undefined,
+			pronouns: user.pronouns as string | undefined,
+			githubLogin: user.githubLogin ?? null,
+			githubLinkedAt: user.githubLinkedAt ?? null,
+		};
+	}
 
 	
 
@@ -92,6 +124,16 @@ export class AdminUserRepository {
 		return user || null;
 	}
 
+	async findByHandlePublic(handle: string): Promise<PublicAdminUser | null> {
+		const user = await this.findByHandle(handle);
+		return user ? this.sanitizeUser(user) : null;
+	}
+
+	async findPublicHandleIdentity(handle: string): Promise<PublicHandleIdentity | null> {
+		const user = await this.findByHandle(handle);
+		return user ? this.sanitizePublicHandleIdentity(user) : null;
+	}
+
 	
 
 
@@ -115,8 +157,40 @@ export class AdminUserRepository {
 		return user || null;
 	}
 
+	async findByIdPublic(id: string): Promise<PublicAdminUser | null> {
+		const user = await this.findById(id);
+		return user ? this.sanitizeUser(user) : null;
+	}
+
 	
 
+
+	async findByGitHubId(githubId: number): Promise<AdminUser | null> {
+		const users = await this.readUsers();
+		return users.find((u: AdminUser) =>
+			u.githubId === githubId && u.isActive !== false
+		) || null;
+	}
+
+	async linkGitHub(userId: string, githubId: number, githubLogin: string): Promise<AdminUser> {
+		const existing = await this.findByGitHubId(githubId);
+		if (existing && existing.id !== userId) {
+			throw new Error(`GitHub account ${githubLogin} is already linked to another admin user`);
+		}
+		return this.update(userId, {
+			githubId,
+			githubLogin,
+			githubLinkedAt: new Date().toISOString(),
+		});
+	}
+
+	async unlinkGitHub(userId: string): Promise<AdminUser> {
+		return this.update(userId, {
+			githubId: null,
+			githubLogin: null,
+			githubLinkedAt: null,
+		});
+	}
 
 	async findByEmail(email: string): Promise<AdminUser | null> {
 		const users = await this.readUsers();
@@ -125,11 +199,28 @@ export class AdminUserRepository {
 		) || null;
 	}
 
+	async findByEmailPublic(email: string): Promise<PublicAdminUser | null> {
+		const user = await this.findByEmail(email);
+		return user ? this.sanitizeUser(user) : null;
+	}
+
 	
 
 
 	async findAll(): Promise<AdminUser[]> {
 		return await this.readUsers();
+	}
+
+	async findAllPublic(): Promise<PublicAdminUser[]> {
+		const users = await this.findAll();
+		return users.map((user) => this.sanitizeUser(user));
+	}
+
+	async findAllPublicHandleIdentities(): Promise<PublicHandleIdentity[]> {
+		const users = await this.findAll();
+		return users
+			.filter((user) => user.isActive !== false)
+			.map((user) => this.sanitizePublicHandleIdentity(user));
 	}
 
 	
@@ -168,6 +259,56 @@ export class AdminUserRepository {
 			needsOnboarding: false,
 			onboardingStep: 0,
 			firstLogin: false,
+			githubId: userData.githubId || null,
+			githubLogin: userData.githubLogin || null,
+			githubLinkedAt: userData.githubId ? new Date().toISOString() : null,
+		};
+
+		users.push(newUser);
+		await this.writeUsers(users);
+
+		return newUser;
+	}
+
+	async createStoredUser(userData: StoredAdminUserData): Promise<AdminUser> {
+		const users = await this.readUsers();
+		const handle = userData.handle ?? userData.username;
+
+		if (!handle) {
+			throw new Error('Stored admin user must include a handle or username');
+		}
+
+		const exists = users.some((u: AdminUser) =>
+			u.handle === handle || u.username === handle
+		);
+
+		if (exists) {
+			throw new Error(`User with handle '${handle}' already exists`);
+		}
+
+		const timestamp = new Date().toISOString();
+		const newUser: AdminUser = {
+			id: userData.id ?? crypto.randomUUID(),
+			username: userData.username ?? handle,
+			handle,
+			displayName: userData.displayName,
+			email: userData.email,
+			passwordHash: userData.passwordHash,
+			role: userData.role,
+			isActive: userData.isActive ?? true,
+			createdAt: userData.createdAt ?? timestamp,
+			updatedAt: userData.updatedAt ?? timestamp,
+			lastLoginAt: userData.lastLoginAt ?? null,
+			lastLogin: userData.lastLogin ?? null,
+			permissions: userData.permissions ?? [],
+			totpEnabled: userData.totpEnabled ?? false,
+			totpSecretId: userData.totpSecretId ?? null,
+			needsOnboarding: userData.needsOnboarding ?? false,
+			onboardingStep: userData.onboardingStep ?? 0,
+			firstLogin: userData.firstLogin ?? false,
+			githubId: userData.githubId ?? null,
+			githubLogin: userData.githubLogin ?? null,
+			githubLinkedAt: userData.githubLinkedAt ?? null,
 		};
 
 		users.push(newUser);
@@ -204,6 +345,19 @@ export class AdminUserRepository {
 
 	async delete(id: string): Promise<void> {
 		await this.update(id, { isActive: false });
+	}
+
+	async deletePermanently(id: string): Promise<boolean> {
+		const users = await this.readUsers();
+		const index = users.findIndex((u: AdminUser) => u.id === id);
+
+		if (index === -1) {
+			return false;
+		}
+
+		users.splice(index, 1);
+		await this.writeUsers(users);
+		return true;
 	}
 
 	
